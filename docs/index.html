@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opencode-fork-lane - Copy-on-Write Git Worktrees + Session Fork for OpenCode</title>
+    <meta
+      name="description"
+      content="opencode-fork-lane is an OpenCode plugin that forks your session into a lane-style copy-on-write git worktree: new branch, warm reflinked caches, one /fork-lane command, plus a fork_lane tool AI agents can call themselves."
+    />
+    <meta
+      name="keywords"
+      content="OpenCode, OpenCode plugin, OpenCode TUI, git worktree, copy-on-write, reflink, session fork, fork session, lane, worktree plugin, slash command, AI agent tool, node_modules, warm cache"
+    />
+    <link rel="canonical" href="https://bojackduy.github.io/opencode-fork-lane/" />
+    <meta property="og:title" content="opencode-fork-lane" />
+    <meta
+      property="og:description"
+      content="Fork the session, keep the cache warm: lane-style copy-on-write git worktrees for OpenCode, from /fork-lane or the fork_lane agent tool."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://bojackduy.github.io/opencode-fork-lane/" />
+    <meta name="twitter:card" content="summary" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090b10;
+        --panel: #111722;
+        --text: #eaf0ff;
+        --muted: #a8b3cf;
+        --accent: #8bd5ff;
+        --accent-2: #c6a0ff;
+        --border: #283247;
+        --green: #7ee2a8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, rgba(139, 213, 255, 0.18), transparent 30rem),
+          radial-gradient(circle at bottom right, rgba(198, 160, 255, 0.14), transparent 28rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        line-height: 1.6;
+      }
+
+      main {
+        width: min(72rem, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 4rem 0;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+        gap: 2rem;
+        align-items: center;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0.5rem 0 1rem;
+        font-size: clamp(2.6rem, 8vw, 5.8rem);
+        line-height: 0.92;
+        letter-spacing: -0.07em;
+      }
+
+      h2 {
+        margin-top: 0;
+        font-size: 1.35rem;
+      }
+
+      p {
+        color: var(--muted);
+        font-size: 1.08rem;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1.5rem;
+      }
+
+      .button {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text);
+        display: inline-flex;
+        font-weight: 700;
+        padding: 0.8rem 1rem;
+        text-decoration: none;
+      }
+
+      .button.primary {
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        color: #07101a;
+      }
+
+      .card,
+      pre {
+        background: rgba(17, 23, 34, 0.86);
+        border: 1px solid var(--border);
+        border-radius: 1.25rem;
+        box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.28);
+      }
+
+      .card {
+        padding: 1.25rem;
+      }
+
+      .demo-card {
+        padding: 0.8rem;
+      }
+
+      .caption {
+        color: var(--muted);
+        font-size: 0.92rem;
+        margin: 0.8rem 0 0.2rem;
+      }
+
+      pre {
+        color: #d9e7ff;
+        overflow-x: auto;
+        padding: 1rem;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .term .p {
+        color: var(--accent);
+      }
+
+      .term .ok {
+        color: var(--green);
+      }
+
+      .term .mut {
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+
+      table {
+        border-collapse: collapse;
+        margin-top: 1rem;
+        width: 100%;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 0.6rem 0.8rem;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: rgba(139, 213, 255, 0.08);
+      }
+
+      td {
+        color: var(--muted);
+      }
+
+      td:first-child,
+      th:first-child {
+        color: var(--text);
+      }
+
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+
+      .showcase {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 1rem;
+        margin-top: 2rem;
+      }
+
+      @media (max-width: 760px) {
+        main {
+          padding: 2.5rem 0;
+        }
+
+        .hero,
+        .grid,
+        .showcase {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div>
+          <div class="eyebrow">OpenCode plugin · TUI + agent tool</div>
+          <h1>Fork the session. Keep the cache warm.</h1>
+          <p>
+            <strong>opencode-fork-lane</strong> forks your OpenCode session into a
+            lane-style copy-on-write git worktree: a new branch, a new folder,
+            and every git-ignored path (<code>node_modules</code>,
+            <code>target/</code>, <code>.env</code>) cloned by reference with
+            reflink — so the new tree starts with warm caches instead of a
+            reinstall and a cold build.
+          </p>
+          <div class="actions">
+            <a class="button primary" href="https://www.npmjs.com/package/@bojackduy/opencode-fork-lane">Install from npm</a>
+            <a class="button" href="https://github.com/bojackduy/opencode-fork-lane">View on GitHub</a>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Package</h2>
+          <pre><code>@bojackduy/opencode-fork-lane</code></pre>
+          <p>
+            One lane name becomes the git branch, the worktree folder
+            (<code>.lane/trees/&lt;name&gt;</code>), and the forked session
+            title. Run <code>/fork-lane</code> yourself, or let the agent call
+            the <code>fork_lane</code> tool to isolate its own risky work.
+          </p>
+        </div>
+      </section>
+
+      <section class="showcase" aria-label="Demo">
+        <div class="card demo-card">
+          <pre class="term"><code><span class="p">$ /fork-lane</span>
+<span class="mut">? Fork lane from…  Full session</span>
+<span class="mut">? Lane name  </span>fix-login
+
+<span class="ok">✓ branch fix-login · .lane/trees/fix-login</span>
+<span class="mut">  git+reflink · 4612 ignored paths · 1.3 GiB shared, 0 copied</span>
+<span class="ok">→ forked session "fix-login", moved into the lane.</span>
+<span class="mut">  Continue here — the old checkout is untouched.</span></code></pre>
+          <p class="caption">Pick a fork point like native fork, name the lane, land in a warm worktree with full history.</p>
+        </div>
+        <div class="card demo-card">
+          <pre class="term"><code><span class="mut"># the agent isolates itself, no human shell needed</span>
+<span class="p">fork_lane(</span>
+  name=<span class="ok">"risky-refactor"</span>,
+  task=<span class="ok">"Migrate auth to sessions; keep API stable"</span>
+<span class="p">)</span>
+
+<span class="mut">{ "branch": "risky-refactor",</span>
+<span class="mut">  "directory": ".lane/trees/risky-refactor",</span>
+<span class="mut">  "moved": true, "via": "git+reflink" }</span></code></pre>
+          <p class="caption">The <code>fork_lane</code> tool gives agents the same isolation TUI users get.</p>
+        </div>
+      </section>
+
+      <section class="grid" aria-label="Features">
+        <div class="card">
+          <h2>Copy-on-write worktrees</h2>
+          <p>Delegates to the <code>lane</code> binary when installed, otherwise <code>git worktree add</code> plus reflink cloning of ignored files (APFS clonefile, Linux reflink, plain-copy fallback).</p>
+        </div>
+        <div class="card">
+          <h2>Session fork with history</h2>
+          <p>Fork from the full session or a specific prompt — the same choice native fork offers — then the fork is moved into the new worktree and retitled with the lane name.</p>
+        </div>
+        <div class="card">
+          <h2>Agent-callable</h2>
+          <p>The <code>fork_lane</code> tool (name, task, base, messageID, moveChanges) lets the model isolate risky, experimental, or parallel work by itself.</p>
+        </div>
+      </section>
+
+      <section style="margin-top: 2rem">
+        <h2>Why not plain git worktree?</h2>
+        <table>
+          <thead>
+            <tr><th></th><th>git worktree add</th><th>lane new</th><th>fork-lane</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Tracked files</td><td>checked out</td><td>checked out</td><td>checked out</td></tr>
+            <tr><td>node_modules, target/, .env</td><td>absent</td><td>by reference</td><td>by reference</td></tr>
+            <tr><td>OpenCode session</td><td>you're on your own</td><td>terminal only</td><td>forked with history, moved in</td></tr>
+            <tr><td>Agent self-isolation</td><td>no</td><td>no</td><td>fork_lane tool</td></tr>
+            <tr><td>Cost of a new tree</td><td>reinstall + cold build</td><td>~0 B, warm</td><td>~0 B, warm</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section style="margin-top: 2rem">
+        <h2>Install</h2>
+        <p>Add the same package to both config files — opencode resolves the server and TUI entrypoints from each:</p>
+        <pre><code>// opencode.jsonc
+{ "plugin": ["@bojackduy/opencode-fork-lane"] }
+
+// tui.json
+{ "plugin": ["@bojackduy/opencode-fork-lane"] }</code></pre>
+        <p>
+          Restart OpenCode, open any session in a git repo, run
+          <code>/fork-lane</code> (or <code>&lt;leader&gt;f</code>), pick a fork
+          point, name the lane. Requires git and bun; the optional
+          <code>lane</code> binary (<code>curl -fsSL https://lane.lukeed.com | sh</code>)
+          is used when present.
+        </p>
+      </section>
+
+      <section style="margin-top: 2rem">
+        <h2>FAQ</h2>
+        <p><strong>Where do lanes live?</strong><br />Under <code>&lt;gitRoot&gt;/.lane/trees/&lt;name&gt;</code> on branch <code>&lt;name&gt;</code> — the same layout <code>lane</code> uses, so <code>lane ls</code>, <code>lane note</code>, and <code>lane merge</code> all work inside fork-lane trees.</p>
+        <p><strong>Does it work without the lane binary?</strong><br />Yes. The plugin reimplements the copy-on-write step: worktree plus reflink cloning of every git-ignored path.</p>
+        <p><strong>What if moving the session fails?</strong><br />The fork keeps full history in the old directory and the worktree is still ready — the tool response tells the agent to use absolute paths under the new tree, and TUI users can Move session manually.</p>
+      </section>
+
+      <nav class="links" aria-label="Project links">
+        <a href="https://github.com/bojackduy/opencode-fork-lane">GitHub repository</a>
+        <a href="https://www.npmjs.com/package/@bojackduy/opencode-fork-lane">npm package</a>
+        <a href="https://lane.lukeed.com/">lane by lukeed</a>
+        <a href="https://github.com/bojackduy/opencode-fork-lane/issues">Issues</a>
+        <a href="https://bojackduy.github.io/opencode-fork-lane/sitemap.xml">Sitemap</a>
+      </nav>
+    </main>
+  </body>
+</html>

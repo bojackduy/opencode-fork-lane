@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/bojackduy/opencode-fork-lane.git"
   },
-  "homepage": "https://github.com/bojackduy/opencode-fork-lane#readme",
+  "homepage": "https://bojackduy.github.io/opencode-fork-lane/",
   "bugs": {
     "url": "https://github.com/bojackduy/opencode-fork-lane/issues"
   },
@@ -28,6 +28,9 @@
   ],
   "files": [
     "src",
+    "docs/index.html",
+    "docs/robots.txt",
+    "docs/sitemap.xml",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

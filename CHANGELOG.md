@@ -1,6 +1,11 @@
 # Changelog
 
-## 0.1.0
+## 0.2.0
+
+- `/fork-lane` fork point picker: choose full session or a specific prompt before naming the lane, mirroring the native fork dialog. The `fork_lane` agent tool already accepted `messageID`; the TUI now uses it too.
+- Multi-line colored helper in the lane-name prompt (branch / folder / session mapping, fork scope, reflink note), theme-aware via `api.theme`.
+- Docs site (`docs/`, served via GitHub Pages) with SEO meta, comparison table, install guide, and FAQ; SEO pass over the README (badges, FAQ, links).
+
 
 Initial release.
 
