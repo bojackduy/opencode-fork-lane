@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
-import { createLaneWorktree, formatBytes, validateLaneName } from "./shared/lane"
+import { createLaneWorktree, formatBytes, sessionTitleFor, validateLaneName } from "./shared/lane"
 
 const PLUGIN_ID = "fork-lane"
 
@@ -84,12 +84,13 @@ const tui: TuiPlugin = async (api) => {
     ))
   }
 
-  // Step 2: lane name becomes branch + folder + session title.
+  // Step 2: lane name becomes branch + folder + session title. "/" is kept for branch/folder (git style),
+  // session title uses " — " for "/" for readability.
   function askName(sessionID: string, cwd: string, messageID: string | undefined) {
     api.ui.dialog.replace(() => (
       <api.ui.DialogPrompt
         title="Fork lane"
-        placeholder="fix-login"
+        placeholder="fix-login  or  feat/login"
         description={() => {
           const t = api.theme.current
           return (
@@ -98,6 +99,7 @@ const tui: TuiPlugin = async (api) => {
               <text>
                 <span style={{ fg: t.accent }}>{"  branch  → "}</span>
                 <span style={{ fg: t.text }}>&lt;name&gt;</span>
+                <span style={{ fg: t.textMuted }}>  (allows "/" e.g. feat/login)</span>
               </text>
               <text>
                 <span style={{ fg: t.accent }}>{"  folder  → "}</span>
@@ -106,6 +108,7 @@ const tui: TuiPlugin = async (api) => {
               <text>
                 <span style={{ fg: t.accent }}>{"  session → "}</span>
                 <span style={{ fg: t.text }}>titled &lt;name&gt;</span>
+                <span style={{ fg: t.textMuted }}>  ("/" → " — ")</span>
               </text>
               <text fg={t.textMuted}>{messageID ? "History forked from the selected prompt." : "Full history forked."}</text>
               <text fg={t.textMuted}>Worktree is copy-on-write (reflink when possible).</text>
@@ -146,7 +149,7 @@ const tui: TuiPlugin = async (api) => {
       if (!newID) throw new Error("fork response contained no session ID")
 
       try {
-        await (api.client as any).session.update({ sessionID: newID, title: slug })
+        await (api.client as any).session.update({ sessionID: newID, title: sessionTitleFor(slug) })
       } catch {}
 
       // Move the fork into the new worktree (the part `session.fork` can't do).
@@ -200,7 +203,10 @@ const tui: TuiPlugin = async (api) => {
         run: open,
       },
     ],
-    bindings: [{ key: "<leader>f", cmd: "fork-lane.run", desc: "Fork into lane worktree" }],
+    // Was <leader>f — collided with telescope (also <leader>f). User requested ctrl+f.
+    // Note: ctrl+f is also the default for "pin session" / "favorite model" in some contexts,
+    // but those are dialog-scoped; the palette slash `/fork-lane` is always the conflict-free entry point.
+    bindings: [{ key: "ctrl+f", cmd: "fork-lane.run", desc: "Fork into lane worktree" }],
   })
 
   api.lifecycle.onDispose(() => {})

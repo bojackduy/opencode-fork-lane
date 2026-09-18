@@ -18,7 +18,7 @@
 
 import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin/tool"
-import { createLaneWorktree, formatBytes, validateLaneName } from "./shared/lane"
+import { createLaneWorktree, formatBytes, sessionTitleFor, validateLaneName } from "./shared/lane"
 
 const PLUGIN_ID = "fork-lane"
 
@@ -100,8 +100,8 @@ const server: Plugin = async ({ client, directory, serverUrl }) => {
           "Use when you want to isolate risky/experimental/parallel work without polluting the main checkout. " +
           "The lane name becomes the git branch, the worktree folder name, and the forked session title. " +
           "After success, do new work under the returned directory (absolute paths). If `moved` is false, the fork still holds full history in the old directory — prefer absolute paths under the new worktree for file edits.",
-        args: {
-          name: tool.schema.string().describe('Lane name — branch + folder + session title. Slugified (e.g. "fix-login"). Min 2 chars.'),
+          args: {
+          name: tool.schema.string().describe('Lane name — branch + folder + session title. Branch/folder keep "/" (e.g. "feat/login"); session title uses " — " for "/" . Slugified, min 2 chars.'),
           task: tool.schema.string().optional().describe("What the lane should do. Posted as the first handoff message in the fork so the continuation has context."),
           base: tool.schema.string().optional().describe("Git ref the lane branches from (lane --base). Defaults to current HEAD."),
           messageID: tool.schema.string().optional().describe("Fork at a specific message ID instead of full history (same as /fork from a message)."),
@@ -163,8 +163,9 @@ const server: Plugin = async ({ client, directory, serverUrl }) => {
           }
 
           // 3) Title the fork with the lane name (TUI asks for name → session name).
+          // Slash in lane name is kept for branch/worktree, session title gets " — " for "/" readability.
           try {
-            await (client as AnyClient).session.update({ path: { id: forkedID }, body: { title: slug } })
+            await (client as AnyClient).session.update({ path: { id: forkedID }, body: { title: sessionTitleFor(slug) } })
           } catch {
             // non-fatal
           }

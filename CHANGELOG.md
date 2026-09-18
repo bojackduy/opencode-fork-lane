@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- **Slash in lane names**: branch and folder now keep "/" (e.g. "feat/login" → branch "feat/login", folder ".lane/trees/feat/login"). Session title adapts "/" → " — " ("feat — login") for readability. Previously "/" was stripped to "-".
+- **Hotkey collision fix**: default TUI binding moved from `<leader>f` (collided with telescope) to `ctrl+f`. The palette slash `/fork-lane` is always the conflict-free entry point. Context note: opencode has no plugin-keymap collision API — plugins register layers independently, so we pick a non‑overlapping default and you can rebind via `tui.jsonc` keybinds if needed (see README).
+
 ## 0.2.1
 
 - Docs site (`docs/`, served via GitHub Pages) with SEO meta, comparison table, install guide, and FAQ; SEO pass over the README (badges, FAQ, links).

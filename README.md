@@ -5,7 +5,7 @@
 
 Fork the session. Keep the cache warm. **opencode-fork-lane** is an [OpenCode](https://opencode.ai) plugin that forks your session into a [lane](https://lane.lukeed.com/)-style **copy-on-write git worktree**: a new branch, a new folder, and every git-ignored path (`node_modules`, `target/`, `.env`) cloned **by reference** with reflink — so the new tree starts with warm caches instead of a reinstall and a cold build.
 
-- **TUI:** `/fork-lane` (or `<leader>f`) asks what to fork (full session or a specific prompt, like native fork), asks for a lane name, creates the worktree, forks the session with history, moves the fork into the new worktree, and navigates to it.
+- **TUI:** `/fork-lane` (or `ctrl+f`) asks what to fork (full session or a specific prompt, like native fork), asks for a lane name, creates the worktree, forks the session with history, moves the fork into the new worktree, and navigates to it.
 - **Agent:** the `fork_lane` tool lets the model isolate risky, experimental, or parallel work by itself — no human shell commands needed.
 
 One lane name becomes the git branch, the worktree folder (`.lane/trees/<name>`), and the forked session title.
@@ -48,9 +48,9 @@ Requires: git, bun >= 1.1, opencode >= 1. Optional but recommended: [`lane`](htt
 ### TUI — `/fork-lane`
 
 1. Open a session in a git repo.
-2. Run `/fork-lane` (or `<leader>f`).
+2. Run `/fork-lane` (or `ctrl+f`).
 3. Pick what to fork — **Full session** or a specific prompt (same choice native fork gives you).
-4. Enter a lane name, e.g. `fix-login`. A multi-line helper shows exactly what the name becomes (branch, folder, session title).
+4. Enter a lane name, e.g. `fix-login` or `feat/login` ("/" creates a namespaced branch/folder; session shows "feat — login").
 5. You land in a forked session titled `fix-login`, rooted at `<gitRoot>/.lane/trees/fix-login` on branch `fix-login`, with history up to your fork point.
 
 ### Agent — `fork_lane`
@@ -88,7 +88,7 @@ Returns JSON: `{ ok, name, branch, directory, via, forkedSession, moved, moveDet
 ## FAQ
 
 **Where do lanes live?**
-Under `<gitRoot>/.lane/trees/<name>` on branch `<name>` — the same layout `lane` uses.
+Under `<gitRoot>/.lane/trees/<name>` on branch `<name>` — the same layout `lane` uses. Names may contain "/" (e.g. `feat/login`) — branch and folder keep the slash, session title shows " — ".
 
 **Does it work without the lane binary?**
 Yes. The plugin reimplements the copy-on-write step: worktree plus reflink cloning of every git-ignored path.

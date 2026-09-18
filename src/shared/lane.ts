@@ -28,21 +28,37 @@ export type LaneResult = {
 }
 
 export function slugify(input: string): string {
-  const slug = input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "")
-    .slice(0, 64)
-  if (!slug) throw new Error(`Invalid lane name "${input}". Use letters, numbers, dashes (e.g. "fix-login").`)
+  // Allow '/' for git branch namespacing (feat/login). Each segment is slugified
+  // independently so "Fix / Login!!" -> "fix/login". Empty segments are dropped.
+  const raw = input.trim().toLowerCase()
+  if (!raw) throw new Error(`Invalid lane name "${input}". Use letters, numbers, dashes, slashes (e.g. "fix-login" or "feat/login").`)
+  const segments = raw
+    .split("/")
+    .map((seg) =>
+      seg
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+/, "")
+        .replace(/-+$/, ""),
+    )
+    .filter(Boolean)
+  const slug = segments.join("/").slice(0, 80)
+  if (!slug) throw new Error(`Invalid lane name "${input}". Use letters, numbers, dashes, slashes (e.g. "fix-login" or "feat/login").`)
   return slug
 }
 
 export function validateLaneName(input: string): string {
   const slug = slugify(input)
-  if (slug.length < 2) throw new Error(`Lane name "${input}" is too short after slugify ("${slug}"). Use at least 2 chars.`)
+  // Count alphanumeric chars, ignoring slashes and dashes.
+  const alnum = slug.replace(/[^a-z0-9]/g, "")
+  if (alnum.length < 2) throw new Error(`Lane name "${input}" is too short after slugify ("${slug}"). Use at least 2 chars.`)
   return slug
+}
+
+export function sessionTitleFor(slug: string): string {
+  // Session titles are plain text, but keeping '/' is confusing in some UIs
+  // (looks like a path). Use " — " for slashes so "feat/login" -> "feat — login"
+  // keeps both parts readable while preserving the original lane name elsewhere.
+  return slug.replace(/\//g, " — ")
 }
 
 function runGit(args: string[], cwd: string): { code: number; stdout: string; stderr: string } {
