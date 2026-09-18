@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@bojackduy/opencode-fork-lane",
+  "version": "0.1.0",
+  "description": "Fork-lane for OpenCode — lane-inspired copy-on-write git worktrees + session fork. /fork-lane creates a new branch + worktree (reflink for ignored files) and forks the session into it. Agent-callable via fork_lane tool.",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bojackduy/opencode-fork-lane.git"
+  },
+  "homepage": "https://github.com/bojackduy/opencode-fork-lane#readme",
+  "bugs": {
+    "url": "https://github.com/bojackduy/opencode-fork-lane/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "fork",
+    "lane",
+    "worktree",
+    "git-worktree",
+    "copy-on-write",
+    "reflink",
+    "session",
+    "tui"
+  ],
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": "./src/server.ts",
+    "./server": "./src/server.ts",
+    "./tui": "./src/tui.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "build": "bun build src/server.ts --target=bun --external @opencode-ai/plugin --external @opencode-ai/plugin/tool --external @opencode-ai/sdk --outfile /tmp/fork-lane-server.js && bun build src/tui.tsx --target=bun --external @opencode-ai/plugin/tui --external @opentui/solid --external @opentui/core --external solid-js --outfile /tmp/fork-lane-tui.js",
+    "prepack": "bun run typecheck && bun test && bun run build",
+    "release:patch": "bun run typecheck && bun test && npm version patch -m \"chore: release %s\" && git push && git push --tags",
+    "release:minor": "bun run typecheck && bun test && npm version minor -m \"chore: release %s\" && git push && git push --tags",
+    "release:major": "bun run typecheck && bun test && npm version major -m \"chore: release %s\" && git push && git push --tags"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "opencode": "^1.0.0",
+    "bun": ">=1.1.0"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*",
+    "@opentui/core": "*",
+    "@opentui/solid": "*",
+    "solid-js": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.30",
+    "@opencode-ai/sdk": "^1.18.18",
+    "@opentui/core": "^0.4.1",
+    "@opentui/solid": "^0.4.1",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.2.0",
+    "solid-js": "^1.9.13",
+    "typescript": "^5.7.0"
+  }
+}

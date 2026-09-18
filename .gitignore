@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.opencode/learn-pending/
+.opencode/loopd/
+.opencode/node_modules/
