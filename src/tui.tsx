@@ -90,12 +90,28 @@ const tui: TuiPlugin = async (api) => {
       <api.ui.DialogPrompt
         title="Fork lane"
         placeholder="fix-login"
-        description={() => (
-          <text>
-            Lane name becomes branch + folder (.lane/trees/&lt;name&gt;) + session title. History is forked
-            {messageID ? " from the selected prompt" : ""}, worktree is copy-on-write (reflink when possible).
-          </text>
-        )}
+        description={() => {
+          const t = api.theme.current
+          return (
+            <box flexDirection="column">
+              <text fg={t.textMuted}>Lane name becomes:</text>
+              <text>
+                <span style={{ fg: t.accent }}>{"  branch  → "}</span>
+                <span style={{ fg: t.text }}>&lt;name&gt;</span>
+              </text>
+              <text>
+                <span style={{ fg: t.accent }}>{"  folder  → "}</span>
+                <span style={{ fg: t.text }}>.lane/trees/&lt;name&gt;</span>
+              </text>
+              <text>
+                <span style={{ fg: t.accent }}>{"  session → "}</span>
+                <span style={{ fg: t.text }}>titled &lt;name&gt;</span>
+              </text>
+              <text fg={t.textMuted}>{messageID ? "History forked from the selected prompt." : "Full history forked."}</text>
+              <text fg={t.textMuted}>Worktree is copy-on-write (reflink when possible).</text>
+            </box>
+          )
+        }}
         onConfirm={(value) => void run(value, sessionID, cwd, messageID)}
         onCancel={() => api.ui.dialog.clear()}
       />
