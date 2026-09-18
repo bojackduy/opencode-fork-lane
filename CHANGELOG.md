@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Docs site (`docs/`, served via GitHub Pages) with SEO meta, comparison table, install guide, and FAQ; SEO pass over the README (badges, FAQ, links).
+- Package metadata: `homepage` points at the docs site, landing page ships inside the npm tarball.
+
 ## 0.2.0
 
 - `/fork-lane` fork point picker: choose full session or a specific prompt before naming the lane, mirroring the native fork dialog. The `fork_lane` agent tool already accepted `messageID`; the TUI now uses it too.
