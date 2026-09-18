@@ -46,8 +46,9 @@ Requires: git, bun >= 1.1, opencode >= 1. Optional but recommended: [`lane`](htt
 
 1. Open a session.
 2. Run `/fork-lane` (or `<leader>f`).
-3. Enter a lane name, e.g. `fix-login`.
-4. You land in a forked session titled `fix-login`, rooted at `<gitRoot>/.lane/trees/fix-login` on branch `fix-login`.
+3. Pick what to fork — **Full session** or a specific prompt (same choice native fork gives you).
+4. Enter a lane name, e.g. `fix-login`.
+5. You land in a forked session titled `fix-login`, rooted at `<gitRoot>/.lane/trees/fix-login` on branch `fix-login`.
 
 ### Agent — `fork_lane`
 

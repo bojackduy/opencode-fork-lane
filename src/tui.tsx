@@ -17,6 +17,19 @@ function errText(e: unknown): string {
   }
 }
 
+function preview(text: string, max = 80): string {
+  const oneLine = text.replace(/\s+/g, " ").trim()
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine
+}
+
+function fmtTime(created: number): string {
+  try {
+    return new Date(created).toLocaleString()
+  } catch {
+    return ""
+  }
+}
+
 const tui: TuiPlugin = async (api) => {
   const open = () => {
     const current = api.route.current
@@ -26,24 +39,70 @@ const tui: TuiPlugin = async (api) => {
       return
     }
     const cwd = api.state.path.directory
+    pickForkPoint(sessionID, cwd)
+  }
 
+  // Step 1 (native fork parity): choose which prompt to fork from —
+  // full session or a specific user message — then ask for the lane name.
+  function pickForkPoint(sessionID: string, cwd: string) {
+    let messages: Array<{ id: string; text: string; created: number }> = []
+    try {
+      const all = api.state.session.messages(sessionID) as any[]
+      for (const m of all) {
+        if (m?.role !== "user") continue
+        const parts = (api.state.part(m.id) as any[]) ?? []
+        const text = parts
+          .filter((p) => p?.type === "text" && !p.synthetic && !p.ignored)
+          .map((p) => p.text ?? "")
+          .join("")
+          .trim()
+        if (!text) continue
+        messages.push({ id: m.id, text, created: m?.time?.created ?? 0 })
+      }
+    } catch {}
+    messages = messages.reverse()
+
+    if (messages.length === 0) {
+      askName(sessionID, cwd, undefined)
+      return
+    }
+
+    api.ui.dialog.replace(() => (
+      <api.ui.DialogSelect
+        title="Fork lane from…"
+        placeholder="Full session or pick a prompt"
+        options={[
+          { title: "Full session", value: undefined, description: "fork with complete history" },
+          ...messages.map((m) => ({
+            title: preview(m.text),
+            value: m.id as string | undefined,
+            footer: m.created ? fmtTime(m.created) : undefined,
+          })),
+        ]}
+        onSelect={(opt) => askName(sessionID, cwd, opt?.value)}
+      />
+    ))
+  }
+
+  // Step 2: lane name becomes branch + folder + session title.
+  function askName(sessionID: string, cwd: string, messageID: string | undefined) {
     api.ui.dialog.replace(() => (
       <api.ui.DialogPrompt
         title="Fork lane"
         placeholder="fix-login"
         description={() => (
           <text>
-            Lane name becomes branch + folder (.lane/trees/&lt;name&gt;) + session title. History is forked, worktree is copy-on-write (reflink when
-            possible).
+            Lane name becomes branch + folder (.lane/trees/&lt;name&gt;) + session title. History is forked
+            {messageID ? " from the selected prompt" : ""}, worktree is copy-on-write (reflink when possible).
           </text>
         )}
-        onConfirm={(value) => void run(value, sessionID, cwd)}
+        onConfirm={(value) => void run(value, sessionID, cwd, messageID)}
         onCancel={() => api.ui.dialog.clear()}
       />
     ))
   }
 
-  async function run(rawName: string, sessionID: string, cwd: string) {
+  async function run(rawName: string, sessionID: string, cwd: string, messageID: string | undefined) {
     let slug: string
     try {
       slug = validateLaneName(rawName)
@@ -62,8 +121,10 @@ const tui: TuiPlugin = async (api) => {
     try {
       const lane = createLaneWorktree({ cwd, name: slug })
 
-      // Fork (history preserved).
-      const forked: any = await (api.client as any).session.fork({ sessionID })
+      // Fork (history preserved, up to the selected prompt when given).
+      const forked: any = await (api.client as any).session.fork(
+        messageID ? { sessionID, messageID } : { sessionID },
+      )
       if (forked?.error) throw new Error(errText(forked.error))
       const newID: string | undefined = forked?.data?.id ?? forked?.id
       if (!newID) throw new Error("fork response contained no session ID")
