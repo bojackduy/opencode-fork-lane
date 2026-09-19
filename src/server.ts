@@ -92,22 +92,20 @@ async function tryMoveSession(opts: {
 }
 
 const server: Plugin = async ({ client, directory, serverUrl }) => {
-  return {
-    tool: {
-      fork_lane: tool({
-        description:
-          "Fork into a lane: create a lane-style copy-on-write git worktree (new branch + new folder, reflink for node_modules/target/.env when possible) AND fork the current session with history. " +
-          "Use when you want to isolate risky/experimental/parallel work without polluting the main checkout. " +
-          "The lane name becomes the git branch, the worktree folder name, and the forked session title. " +
-          "After success, do new work under the returned directory (absolute paths). If `moved` is false, the fork still holds full history in the old directory — prefer absolute paths under the new worktree for file edits.",
-          args: {
-          name: tool.schema.string().describe('Lane name — branch + folder + session title. Branch/folder keep "/" (e.g. "feat/login"); session title uses " — " for "/" . Slugified, min 2 chars.'),
-          task: tool.schema.string().optional().describe("What the lane should do. Posted as the first handoff message in the fork so the continuation has context."),
-          base: tool.schema.string().optional().describe("Git ref the lane branches from (lane --base). Defaults to current HEAD."),
-          messageID: tool.schema.string().optional().describe("Fork at a specific message ID instead of full history (same as /fork from a message)."),
-          moveChanges: tool.schema.boolean().optional().describe("Move uncommitted changes into the lane via move-session (default true). Set false to keep the old checkout dirty and lane clean."),
-        },
-        execute: async (args, context) => {
+  const description =
+    "Fork into a lane: create a lane-style copy-on-write git worktree (new branch + new folder, reflink for node_modules/target/.env when possible) AND fork the current session with history. " +
+    "Use when you want to isolate risky/experimental/parallel work without polluting the main checkout. " +
+    "The lane name becomes the git branch, the worktree folder name, and the forked session title. " +
+    "After success, do new work under the returned directory (absolute paths). If `moved` is false, the fork still holds full history in the old directory — prefer absolute paths under the new worktree for file edits. " +
+    "Aliases: this tool is also available as `lane` (same behavior). When the user says 'lane', 'fork lane', 'fork-lane', or 'worktree', call this tool."
+  const argDefs = {
+    name: tool.schema.string().describe('Lane name — branch + folder + session title. Branch/folder keep "/" (e.g. "feat/login"); session title uses " — " for "/" . Slugified, min 2 chars.'),
+    task: tool.schema.string().optional().describe("What the lane should do. Posted as the first handoff message in the fork so the continuation has context."),
+    base: tool.schema.string().optional().describe("Git ref the lane branches from (lane --base). Defaults to current HEAD."),
+    messageID: tool.schema.string().optional().describe("Fork at a specific message ID instead of full history (same as /fork from a message)."),
+    moveChanges: tool.schema.boolean().optional().describe("Move uncommitted changes into the lane via move-session (default true). Set false to keep the old checkout dirty and lane clean."),
+  }
+  const execute = async (args: { name: string; task?: string; base?: string; messageID?: string; moveChanges?: boolean }, context: any) => {
           const sessionID = (context as any)?.sessionID as string | undefined
           if (!sessionID) {
             return { title: "No session", output: "fork_lane needs a session context (call from an active OpenCode session)." }
@@ -224,8 +222,13 @@ const server: Plugin = async ({ client, directory, serverUrl }) => {
             title: move.moved ? `Fork-lane "${slug}" → ${lane.directory}` : `Fork-lane "${slug}" (unmoved)`,
             output: JSON.stringify(out, null, 2),
           }
-        },
-      }),
+  }
+  return {
+    tool: {
+      // Primary name (snake_case, agent convention).
+      fork_lane: tool({ description, args: argDefs, execute }),
+      // Alias so "lane", "use lane", "/lane" all resolve instead of "tool not found".
+      lane: tool({ description: `${description} (Alias of fork_lane.)`, args: argDefs, execute }),
     },
   }
 }

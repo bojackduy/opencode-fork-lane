@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- **Naming aliases**: agent tool now registered as both `fork_lane` (primary) and `lane` (alias, same behavior) so "lane", "fork lane", "fork-lane", or "worktree" all resolve instead of "tool not found". TUI now exposes both `/fork-lane` and `/lane` palette slashes (`fork-lane.run` + `lane.run`) to the same flow. Tool description advertises the aliases for model discovery.
+
 ## 0.2.2
 
 - **Slash in lane names**: branch and folder now keep "/" (e.g. "feat/login" → branch "feat/login", folder ".lane/trees/feat/login"). Session title adapts "/" → " — " ("feat — login") for readability. Previously "/" was stripped to "-".

@@ -202,10 +202,18 @@ const tui: TuiPlugin = async (api) => {
         slashName: "fork-lane",
         run: open,
       },
+      {
+        name: "lane.run",
+        title: "Fork lane (alias)",
+        category: "Session",
+        namespace: "palette",
+        slashName: "lane",
+        run: open,
+      },
     ],
     // Was <leader>f — collided with telescope (also <leader>f). User requested ctrl+f.
     // Note: ctrl+f is also the default for "pin session" / "favorite model" in some contexts,
-    // but those are dialog-scoped; the palette slash `/fork-lane` is always the conflict-free entry point.
+    // but those are dialog-scoped; the palette slashes `/fork-lane` and `/lane` are always the conflict-free entry points.
     bindings: [{ key: "ctrl+f", cmd: "fork-lane.run", desc: "Fork into lane worktree" }],
   })
 
