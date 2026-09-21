@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import type { Plugin as TuiV2 } from "@opencode/plugin/tui"
 import { createLaneWorktree, formatBytes, sessionTitleFor, validateLaneName } from "./shared/lane"
 
 const PLUGIN_ID = "fork-lane"
@@ -220,7 +221,191 @@ const tui: TuiPlugin = async (api) => {
   api.lifecycle.onDispose(() => {})
 }
 
+// ─── V2 (opencode v2 TUI) ───────────────────────────────────────────────────
+// Same two-step flow (fork point → lane name → run), rewritten for the v2 TUI
+// host: `DialogSelect`/`DialogPrompt` components become awaited
+// `ctx.ui.dialog.select()`/`.prompt()` calls, `route.current` becomes
+// `ctx.ui.router.current()`, and messages come from
+// `ctx.data.session.message.list()`. Session ops go through `ctx.client`
+// with the v2 flat input shapes and the same fallbacks as the v1 side.
+const v2setup: TuiV2.Definition["setup"] = (ctx) => {
+  const directory = ctx.location?.directory ?? ctx.data.location.default().directory
+  const client = ctx.client as any
+  const toast = (variant: "error" | "success" | "warning", title: string, message: string) =>
+    ctx.ui.toast.show({ variant, title, message })
+
+  const open = () => {
+    const current = ctx.ui.router.current()
+    const sessionID = current.type === "session" ? current.sessionID : undefined
+    if (!sessionID) {
+      toast("error", "fork-lane", "Open a session first, then /fork-lane.")
+      return
+    }
+    void pickForkPoint(sessionID)
+  }
+
+  async function pickForkPoint(sessionID: string) {
+    let messages: Array<{ id: string; text: string; created: number }> = []
+    try {
+      const all = ctx.data.session.message.list(sessionID) as any[]
+      for (const m of all) {
+        const type = (m as any)?.type ?? (m as any)?.role
+        if (type !== "user" && type !== "session.message.user") continue
+        const parts = ((m as any)?.parts ?? (m as any)?.content ?? []) as any[]
+        const text = (Array.isArray(parts) ? parts : [])
+          .filter((p) => (p?.type === "text" || typeof p?.text === "string") && !p.synthetic && !p.ignored)
+          .map((p) => p.text ?? "")
+          .join("")
+          .trim() || ((m as any)?.text ?? "")
+        if (!text.trim()) continue
+        messages.push({ id: (m as any).id, text: text.trim(), created: (m as any)?.created ?? (m as any)?.time?.created ?? 0 })
+      }
+    } catch {}
+    messages = messages.reverse()
+
+    if (messages.length === 0) {
+      await askName(sessionID, undefined)
+      return
+    }
+    // "" is the "Full session" sentinel: a cancelled dialog resolves
+    // undefined, which must abort instead of forking.
+    const picked = await ctx.ui.dialog
+      .select<string>({
+        title: "Fork lane from…",
+        placeholder: "Full session or pick a prompt",
+        options: [
+          { title: "Full session", value: "", description: "fork with complete history" },
+          ...messages.map((m) => ({
+            title: preview(m.text),
+            value: m.id,
+            footer: m.created ? fmtTime(m.created) : undefined,
+          })),
+        ],
+      })
+      .catch(() => undefined)
+    if (picked === undefined) return
+    await askName(sessionID, picked === "" ? undefined : picked)
+  }
+
+  async function askName(sessionID: string, messageID: string | undefined) {
+    const value = await ctx.ui.dialog
+      .prompt({
+        title: "Fork lane",
+        placeholder: "fix-login  or  feat/login",
+        description:
+          `Lane name becomes: branch → <name>, folder → .lane/trees/<name>, session → titled <name>. ` +
+          `${messageID ? "History forked from the selected prompt." : "Full history forked."} Worktree is copy-on-write.`,
+      })
+      .catch(() => undefined)
+    if (value === undefined) return
+    await run(value, sessionID, messageID)
+  }
+
+  async function run(rawName: string, sessionID: string, messageID: string | undefined) {
+    let slug: string
+    try {
+      slug = validateLaneName(rawName)
+    } catch (e) {
+      toast("error", "fork-lane", errText(e))
+      return
+    }
+    ctx.ui.dialog.show(() => <text>{`Forking lane "${slug}"…`}</text>)
+    try {
+      const lane = createLaneWorktree({ cwd: directory, name: slug })
+
+      let newID: string | undefined
+      try {
+        const forked: any = await client.session.fork(
+          messageID ? { sessionID, before: messageID } : { sessionID },
+        )
+        if (forked?.error) throw new Error(errText(forked.error))
+        newID = forked?.data?.id ?? forked?.id
+      } catch {
+        const forked: any = await client.session.fork({ sessionID })
+        if (forked?.error) throw new Error(errText(forked.error))
+        newID = forked?.data?.id ?? forked?.id
+      }
+      if (!newID) throw new Error("fork response contained no session ID")
+
+      try {
+        await client.session.update({ sessionID: newID, title: sessionTitleFor(slug) })
+      } catch {}
+
+      let moved = false
+      let moveDetail = ""
+      try {
+        const res: any = await client.session.move({ sessionID: newID, directory: lane.directory })
+        if (res?.error) moveDetail = errText(res.error)
+        else moved = true
+      } catch (e) {
+        try {
+          const res: any = await client.experimental?.controlPlane?.moveSession?.({
+            sessionID: newID,
+            destination: { directory: lane.directory },
+            moveChanges: true,
+          })
+          if (res?.error) moveDetail = errText(res.error)
+          else moved = true
+        } catch (e2) {
+          moveDetail = errText(e2)
+        }
+      }
+
+      ctx.ui.dialog.clear()
+      try {
+        ctx.ui.router.navigate({ type: "session", sessionID: newID })
+      } catch {}
+      toast(
+        moved ? "success" : "warning",
+        moved ? `Fork-lane "${slug}"` : `Fork "${slug}" (unmoved)`,
+        moved
+          ? `${lane.directory} (${lane.branch}, ${lane.via}${lane.ignoredCloned >= 0 ? `, ${lane.ignoredCloned} ignored, ${formatBytes(lane.ignoredBytes)}` : ""})`
+          : `Worktree ready at ${lane.directory} but move failed: ${moveDetail.slice(0, 160)}. Use Move session → ${lane.directory}.`,
+      )
+    } catch (e) {
+      ctx.ui.dialog.clear()
+      toast("error", "fork-lane failed", errText(e).slice(0, 400))
+    }
+  }
+
+  let layerRegistered = false
+  const unclaimSlot = ctx.ui.slot({
+    append: "app",
+    render: () => {
+      if (!layerRegistered) {
+        layerRegistered = true
+        ctx.keymap.layer(() => ({
+          commands: [
+            {
+              id: "fork-lane.run",
+              title: "Fork lane",
+              group: "Session",
+              palette: true,
+              slash: { name: "fork-lane" },
+              bind: "ctrl+f",
+              run: open,
+            },
+            {
+              id: "lane.run",
+              title: "Fork lane (alias)",
+              group: "Session",
+              palette: true,
+              slash: { name: "lane" },
+              run: open,
+            },
+          ],
+          bindings: ["fork-lane.run", "lane.run"],
+        }))
+      }
+      return null
+    },
+  })
+
+  return () => unclaimSlot()
+}
+
 export default {
   id: PLUGIN_ID,
   tui,
-} satisfies TuiPluginModule & { id: string }
+  setup: v2setup,
+} satisfies TuiPluginModule & { id: string; setup: typeof v2setup }
