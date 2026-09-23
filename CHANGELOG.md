@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- **Move actually works now (agent tool)**: 0.3.1's loopback retry didn't help — reproduced end-to-end via `opencode run` and the move still failed with `tried localhost:4096, 127.0.0.1:4096: Unable to connect`. Root cause from opencode's plugin loader source: in TUI/run mode `Server.url` is unset so `serverUrl` is a dead `localhost:4096` fallback, while the plugin `client` is wired with the server's in-process fetch (plus auth headers in serve mode). The tool now POSTs `/experimental/control-plane/move-session` through the plugin client's own transport first (raw fetch kept as last resort). Verified: `moved: true` and the forked session's DB row shows the lane worktree directory under the parent project.
+
 ## 0.3.1
 
 - **Fix silent move failures (agent tool)**: every server-tool move failed with `moveSession fetch failed: Unable to connect` — raw `fetch` to `serverUrl` never connected (unconnectable host such as a wildcard bind), while the TUI path (in-process client) worked. The tool now retries loopback-swapped bases (`0.0.0.0`/`::`/`localhost` → `127.0.0.1` and back), sends a body-only POST exactly like the v2 SDK client (no `?directory` query), and times out after 15s per candidate.

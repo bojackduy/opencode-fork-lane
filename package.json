@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@bojackduy/opencode-fork-lane",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Fork-lane for OpenCode — lane-inspired copy-on-write git worktrees + session fork. /fork-lane (/lane) creates a new branch + worktree (reflink for ignored files) and forks the session into it. Agent-callable via fork_lane tool (alias lane).",
   "type": "module",
   "license": "AGPL-3.0-or-later",

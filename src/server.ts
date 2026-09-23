@@ -52,6 +52,22 @@ function sdkError(res: any): string | undefined {
 
 export type MoveResult = { moved: boolean; detail: string; kind: MoveKind; remedy: string }
 
+// The experimental move route's success/error shapes, mirrored from the
+// server's HttpApi: 204 No Content on success, 400 MoveSessionError
+// ({ name, data: { message } }) on failure.
+function resultError(res: any): string | undefined {
+  if (!res) return "empty moveSession response"
+  const status = res?.response?.status ?? res?.status
+  if (typeof status === "number" && status >= 400) {
+    return (
+      sdkError(res) ??
+      (typeof res?.data === "string" ? res.data : undefined) ??
+      `moveSession HTTP ${status}`
+    )
+  }
+  return sdkError(res)
+}
+
 async function tryMoveSession(opts: {
   client: AnyClient
   serverUrl: URL | undefined
@@ -64,11 +80,38 @@ async function tryMoveSession(opts: {
     const { kind, remedy } = classifyMoveError(detail)
     return { moved: false, detail, kind, remedy }
   }
-  // 1) v2-style client with controlPlane helper (TUI Api has it; be liberal).
+  const body = {
+    sessionID: opts.sessionID,
+    destination: { directory: opts.destination },
+    moveChanges: opts.moveChanges,
+  }
+  // 1) The plugin client's own transport. The loader wires it with the
+  //    server's in-process fetch (TUI/run mode, where serverUrl is a dead
+  //    localhost:4096 fallback) or auth headers (serve mode) — either way
+  //    this is the only channel guaranteed to reach the server. The v1 SDK
+  //    has no moveSession helper, so we POST the experimental route through
+  //    the client's underlying hey-api transport directly.
+  try {
+    const transport = opts.client?._client ?? opts.client?.client
+    const post = transport?.post ?? transport?.request
+    if (typeof post === "function") {
+      const res = await post({
+        url: "/experimental/control-plane/move-session",
+        body,
+        headers: { "Content-Type": "application/json" },
+      })
+      const err = resultError(res)
+      if (!err) return { moved: true, detail: "via plugin client transport", kind: "unknown" as MoveKind, remedy: "" }
+      return fail(`moveSession via client: ${err}`)
+    }
+  } catch (e) {
+    // fall through to the remaining strategies
+  }
+  // 2) v2-style client with controlPlane helper (TUI Api has it; be liberal).
   try {
     const cp = opts.client?.controlPlane ?? opts.client?.controlplane ?? opts.client?.v2?.controlPlane
     if (cp?.moveSession) {
-      const res = await cp.moveSession({ sessionID: opts.sessionID, destination: { directory: opts.destination }, moveChanges: opts.moveChanges })
+      const res = await cp.moveSession(body)
       const err = sdkError(res)
       if (!err) return { moved: true, detail: "via client.controlPlane.moveSession", kind: "unknown" as MoveKind, remedy: "" }
       return fail(`controlPlane.moveSession: ${err}`)
@@ -76,17 +119,15 @@ async function tryMoveSession(opts: {
   } catch (e) {
     // fall through to raw HTTP
   }
-  // 2) Raw HTTP to the experimental route (body-only, exactly like the v2 SDK
+  // 3) Raw HTTP to the experimental route (body-only, exactly like the v2 SDK
   //    client — no ?directory query). serverUrl may be unconnectable as given
   //    (wildcard bind 0.0.0.0, localhost→::1), so try loopback variants.
+  //    Last resort: in TUI/run mode serverUrl is a dead localhost:4096
+  //    fallback and this always fails — strategy 1 above is the real path.
   if (!opts.serverUrl) return fail("no serverUrl for raw moveSession")
   const bases = candidateBases(opts.serverUrl)
   if (bases.length === 0) return fail(`unparseable serverUrl: ${String(opts.serverUrl).slice(0, 120)}`)
-  const body = JSON.stringify({
-    sessionID: opts.sessionID,
-    destination: { directory: opts.destination },
-    moveChanges: opts.moveChanges,
-  })
+  const rawBody = JSON.stringify(body)
   const attempted: string[] = []
   for (const base of bases) {
     const url = moveEndpoint(base)
@@ -95,7 +136,7 @@ async function tryMoveSession(opts: {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body,
+        body: rawBody,
         signal: AbortSignal.timeout(15_000),
       })
       if (res.ok) return { moved: true, detail: `via POST ${hostPort(base)}/experimental/control-plane/move-session`, kind: "unknown" as MoveKind, remedy: "" }
