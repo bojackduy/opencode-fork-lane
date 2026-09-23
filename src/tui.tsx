@@ -2,6 +2,7 @@
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import type { Plugin as TuiV2 } from "@opencode/plugin/tui"
 import { createLaneWorktree, formatBytes, sessionTitleFor, validateLaneName } from "./shared/lane"
+import { classifyMoveError } from "./shared/move"
 
 const PLUGIN_ID = "fork-lane"
 
@@ -181,11 +182,11 @@ const tui: TuiPlugin = async (api) => {
         } catch {}
       }
       api.ui.toast({
-        variant: moved ? "success" : "warning",
-        title: moved ? `Fork-lane "${slug}"` : `Fork "${slug}" (unmoved)`,
+        variant: moved ? "success" : "error",
+        title: moved ? `Fork-lane "${slug}"` : `Fork "${slug}" created, move failed`,
         message: moved
           ? `${lane.directory} (${lane.branch}, ${lane.via}${lane.ignoredCloned >= 0 ? `, ${lane.ignoredCloned} ignored, ${formatBytes(lane.ignoredBytes)}` : ""})`
-          : `Worktree ready at ${lane.directory} but move failed: ${moveDetail.slice(0, 160)}. Use Move session → ${lane.directory}.`,
+          : `Fork ${newID} is still rooted at the old directory. Worktree ready at ${lane.directory} (branch ${lane.branch}). Cause: ${moveDetail.slice(0, 300)} Remedy: ${classifyMoveError(moveDetail).remedy}`,
       })
     } catch (e) {
       api.ui.dialog.clear()
@@ -356,11 +357,11 @@ const v2setup: TuiV2.Definition["setup"] = (ctx) => {
         ctx.ui.router.navigate({ type: "session", sessionID: newID })
       } catch {}
       toast(
-        moved ? "success" : "warning",
-        moved ? `Fork-lane "${slug}"` : `Fork "${slug}" (unmoved)`,
+        moved ? "success" : "error",
+        moved ? `Fork-lane "${slug}"` : `Fork "${slug}" created, move failed`,
         moved
           ? `${lane.directory} (${lane.branch}, ${lane.via}${lane.ignoredCloned >= 0 ? `, ${lane.ignoredCloned} ignored, ${formatBytes(lane.ignoredBytes)}` : ""})`
-          : `Worktree ready at ${lane.directory} but move failed: ${moveDetail.slice(0, 160)}. Use Move session → ${lane.directory}.`,
+          : `Fork ${newID} is still rooted at the old directory. Worktree ready at ${lane.directory} (branch ${lane.branch}). Cause: ${moveDetail.slice(0, 300)} Remedy: ${classifyMoveError(moveDetail).remedy}`,
       )
     } catch (e) {
       ctx.ui.dialog.clear()

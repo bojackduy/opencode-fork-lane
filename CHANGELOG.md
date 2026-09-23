@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- **Fix silent move failures (agent tool)**: every server-tool move failed with `moveSession fetch failed: Unable to connect` — raw `fetch` to `serverUrl` never connected (unconnectable host such as a wildcard bind), while the TUI path (in-process client) worked. The tool now retries loopback-swapped bases (`0.0.0.0`/`::`/`localhost` → `127.0.0.1` and back), sends a body-only POST exactly like the v2 SDK client (no `?directory` query), and times out after 15s per candidate.
+- **No more "can't move, don't know why"**: move failures return classified `moveKind` (`unreachable` / `project-mismatch` / `apply-conflict` / `not-found` / `not-git` / `http`) plus a `moveRemedy`, with the attempted host:ports in `moveDetail`. TUI toasts upgraded from truncated warning to full error + remedy.
+
 ## 0.2.3
 
 - **Naming aliases**: agent tool now registered as both `fork_lane` (primary) and `lane` (alias, same behavior) so "lane", "fork lane", "fork-lane", or "worktree" all resolve instead of "tool not found". TUI now exposes both `/fork-lane` and `/lane` palette slashes (`fork-lane.run` + `lane.run`) to the same flow. Tool description advertises the aliases for model discovery.

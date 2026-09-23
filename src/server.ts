@@ -5,13 +5,14 @@
 //   1. Create lane worktree (lane binary if present, else git + reflink).
 //   2. Fork current session (history preserved) and title it with lane name.
 //   3. Best-effort move of the forked session into the new worktree via
-//      POST /experimental/control-plane/move-session (v2 route). The v1 SDK
-//      client has no moveSession helper, so we call the HTTP route directly
-//      with the plugin's serverUrl + directory routing. If the move fails
-//      (older server, auth, cross-project), we still return success: the fork
-//      holds history and the worktree is ready — the agent continues with
-//      absolute paths under the new directory, and the human can Move session
-//      from the TUI or re-run /fork-lane (TUI moves correctly).
+//      POST /experimental/control-plane/move-session (body-only, like the v2
+//      SDK client). The v1 SDK client has no moveSession helper, so we call
+//      the HTTP route directly with the plugin's serverUrl (with loopback
+//      fallbacks for wildcard-bind hosts). If the move fails we still return
+//      success with moved:false PLUS a classified moveKind/moveRemedy: the
+//      fork holds history and the worktree is ready — the agent continues
+//      with absolute paths under the new directory, and the human can Move
+//      session from the TUI or re-run /fork-lane (TUI moves correctly).
 //
 // The tool is intentionally agent-first: `name` is required (lane + session
 // title), `task` seeds the handoff message posted into the fork.
@@ -20,6 +21,7 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { tool } from "@opencode-ai/plugin/tool"
 import type { Plugin as V2Plugin } from "@opencode/plugin"
 import { createLaneWorktree, formatBytes, sessionTitleFor, validateLaneName } from "./shared/lane"
+import { candidateBases, classifyMoveError, hostPort, moveEndpoint, type MoveKind } from "./shared/move"
 
 const PLUGIN_ID = "fork-lane"
 
@@ -48,6 +50,8 @@ function sdkError(res: any): string | undefined {
   }
 }
 
+export type MoveResult = { moved: boolean; detail: string; kind: MoveKind; remedy: string }
+
 async function tryMoveSession(opts: {
   client: AnyClient
   serverUrl: URL | undefined
@@ -55,41 +59,57 @@ async function tryMoveSession(opts: {
   sessionID: string
   destination: string
   moveChanges: boolean
-}): Promise<{ moved: boolean; detail: string }> {
+}): Promise<MoveResult> {
+  const fail = (detail: string): MoveResult => {
+    const { kind, remedy } = classifyMoveError(detail)
+    return { moved: false, detail, kind, remedy }
+  }
   // 1) v2-style client with controlPlane helper (TUI Api has it; be liberal).
   try {
     const cp = opts.client?.controlPlane ?? opts.client?.controlplane ?? opts.client?.v2?.controlPlane
     if (cp?.moveSession) {
       const res = await cp.moveSession({ sessionID: opts.sessionID, destination: { directory: opts.destination }, moveChanges: opts.moveChanges })
       const err = sdkError(res)
-      if (!err) return { moved: true, detail: "via client.controlPlane.moveSession" }
-      return { moved: false, detail: `controlPlane.moveSession: ${err}` }
+      if (!err) return { moved: true, detail: "via client.controlPlane.moveSession", kind: "unknown" as MoveKind, remedy: "" }
+      return fail(`controlPlane.moveSession: ${err}`)
     }
   } catch (e) {
     // fall through to raw HTTP
   }
-  // 2) Raw HTTP to the experimental route using the plugin server URL.
-  //    Auth: server plugins run in-process; the route accepts localhost without
-  //    extra headers in default installs. Include directory routing as query.
-  try {
-    if (!opts.serverUrl) return { moved: false, detail: "no serverUrl for raw moveSession" }
-    const base = opts.serverUrl.toString().replace(/\/$/, "")
-    const url = `${base}/experimental/control-plane/move-session?directory=${encodeURIComponent(opts.directory)}`
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionID: opts.sessionID,
-        destination: { directory: opts.destination },
-        moveChanges: opts.moveChanges,
-      }),
-    })
-    if (res.ok) return { moved: true, detail: "via POST /experimental/control-plane/move-session" }
-    const text = await res.text().catch(() => "")
-    return { moved: false, detail: `moveSession HTTP ${res.status}: ${text.slice(0, 300)}` }
-  } catch (e) {
-    return { moved: false, detail: `moveSession fetch failed: ${describeError(e)}` }
+  // 2) Raw HTTP to the experimental route (body-only, exactly like the v2 SDK
+  //    client — no ?directory query). serverUrl may be unconnectable as given
+  //    (wildcard bind 0.0.0.0, localhost→::1), so try loopback variants.
+  if (!opts.serverUrl) return fail("no serverUrl for raw moveSession")
+  const bases = candidateBases(opts.serverUrl)
+  if (bases.length === 0) return fail(`unparseable serverUrl: ${String(opts.serverUrl).slice(0, 120)}`)
+  const body = JSON.stringify({
+    sessionID: opts.sessionID,
+    destination: { directory: opts.destination },
+    moveChanges: opts.moveChanges,
+  })
+  const attempted: string[] = []
+  for (const base of bases) {
+    const url = moveEndpoint(base)
+    attempted.push(hostPort(base))
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal: AbortSignal.timeout(15_000),
+      })
+      if (res.ok) return { moved: true, detail: `via POST ${hostPort(base)}/experimental/control-plane/move-session`, kind: "unknown" as MoveKind, remedy: "" }
+      const text = await res.text().catch(() => "")
+      return fail(`moveSession HTTP ${res.status} via ${hostPort(base)}: ${text.slice(0, 1000)}`)
+    } catch (e) {
+      // Connection-level failure — try the next candidate base.
+      const msg = describeError(e)
+      if (base === bases[bases.length - 1]) {
+        return fail(`moveSession fetch failed (tried ${attempted.join(", ")}): ${msg}`)
+      }
+    }
   }
+  return fail(`moveSession fetch failed (tried ${attempted.join(", ")})`)
 }
 
 // Session operations behind the lane flow. v1 and v2 differ in client
@@ -99,7 +119,7 @@ type SessionOps = {
   fork: (input: { sessionID: string; messageID?: string }) => Promise<{ id: string; historyPreserved: boolean }>
   updateTitle: (sessionID: string, title: string) => Promise<void>
   prompt: (sessionID: string, text: string) => Promise<void>
-  move: (sessionID: string, directory: string, moveChanges: boolean) => Promise<{ moved: boolean; detail: string }>
+  move: (sessionID: string, directory: string, moveChanges: boolean) => Promise<MoveResult>
 }
 
 type LaneArgs = { name: string; task?: string; base?: string; messageID?: string; moveChanges?: boolean }
@@ -185,7 +205,11 @@ async function runForkLane(
   // 5) Best-effort move of the fork into the new worktree.
   const move = await ops
     .move(forkedID, lane.directory, moveChanges)
-    .catch((e) => ({ moved: false, detail: describeError(e) }))
+    .catch((e) => {
+      const detail = describeError(e)
+      const { kind, remedy } = classifyMoveError(detail)
+      return { moved: false, detail, kind, remedy }
+    })
 
   const out = {
     ok: true,
@@ -202,9 +226,11 @@ async function runForkLane(
     forkedSession: forkedID,
     moved: move.moved,
     moveDetail: move.detail,
+    moveKind: move.kind,
+    moveRemedy: move.remedy,
     next: move.moved
       ? `Continue in forked session ${forkedID} — it now lives in ${lane.directory} (branch ${lane.branch}).`
-      : `Fork ${forkedID} holds history (still rooted at old directory). Do new edits under ${lane.directory} with absolute paths (branch ${lane.branch}). Human: TUI /fork-lane moves correctly, or Move session → ${lane.directory}.`,
+      : `Fork ${forkedID} holds history (still rooted at old directory). Do new edits under ${lane.directory} with absolute paths (branch ${lane.branch}). Remedy: ${move.remedy}`,
   }
   return {
     title: move.moved ? `Fork-lane "${slug}" → ${lane.directory}` : `Fork-lane "${slug}" (unmoved)`,
@@ -341,7 +367,7 @@ const setup = async (context: V2Plugin.Context) => {
     async move(sessionID, directory) {
       // v2 move has no moveChanges flag; the domain owns change handling.
       await context.session.move({ sessionID, directory } as never)
-      return { moved: true, detail: "via v2 session.move" }
+      return { moved: true, detail: "via v2 session.move", kind: "unknown" as MoveKind, remedy: "" }
     },
   }
   const execute = (args: LaneArgs, execCtx: { sessionID: string; directory: string }) =>
